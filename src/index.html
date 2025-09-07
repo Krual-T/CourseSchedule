@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>飞书课程表</title>
+  <!-- 引入飞书JS-SDK，用于调用飞书客户端能力 -->
+  <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/lark-js-sdk/2.1.0/index.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+
+  <script>
+    // 配置Tailwind自定义主题
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#2563eb',
+            secondary: '#64748b',
+            neutral: '#f1f5f9',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+
+  <style type="text/tailwindcss">
+    @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .card-shadow {
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+  <div class="container mx-auto px-4 py-8 max-w-3xl">
+    <!-- 应用标题栏 -->
+    <header class="flex justify-between items-center mb-8">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+          <i class="fa fa-calendar text-white text-xl"></i>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-800">飞书课程表</h1>
+      </div>
+      <button id="syncBtn"
+        class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all">
+        <i class="fa fa-refresh"></i>
+        <span>同步日历</span>
+      </button>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="bg-white rounded-xl p-6 card-shadow">
+      <div id="appContent" class="text-center py-12">
+        <h2 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-gray-800 mb-4">Hello World!</h2>
+        <p class="text-gray-600 mb-6">这是飞书课程表应用的起点</p>
+        <div class="inline-flex items-center text-sm text-gray-500">
+          <i class="fa fa-info-circle mr-2"></i>
+          <span>下一步：集成飞书日历功能</span>
+        </div>
+      </div>
+
+      <!-- 用户信息区域 -->
+      <div id="userInfo" class="mt-8 pt-6 border-t border-gray-100 hidden">
+        <h3 class="text-lg font-semibold text-gray-700 mb-3">当前用户信息</h3>
+        <pre id="userData" class="bg-gray-50 p-4 rounded-lg text-sm text-gray-600 overflow-x-auto"></pre>
+      </div>
+    </main>
+
+    <!-- 底部信息 -->
+    <footer class="mt-8 text-center text-gray-500 text-sm">
+      <p>飞书课程表应用 &copy; 2023</p>
+    </footer>
+  </div>
+
+  <script>
+    // 初始化飞书JS-SDK
+    async function initFeishuSDK() {
+      try {
+        // 这里的appId需要替换为你在飞书开放平台创建的应用的App ID
+        const appId = "cli_a83c257e3e35d00c"; // 请替换为实际的App ID
+
+        // 初始化SDK
+        await lark.ready({
+          appId: appId,
+          // 对于网页应用，通常不需要签名验证，飞书客户端会自动处理
+          jsApiList: [
+            'device.notification.showToast',
+            'contact.getUserInfo',
+            'calendar.getEvents' // 后续日历功能需要用到的API
+          ]
+        });
+
+        console.log('飞书SDK初始化成功');
+        showToast('应用加载成功', 'success');
+
+        // 绑定同步按钮事件
+        document.getElementById('syncBtn').addEventListener('click', async () => {
+          try {
+            showToast('开始获取用户信息...', 'loading');
+
+            // 获取当前用户信息（演示用）
+            const userInfo = await lark.contact.getUserInfo();
+            console.log('用户信息:', userInfo);
+
+            // 显示用户信息
+            document.getElementById('userData').textContent = JSON.stringify(userInfo, null, 2);
+            document.getElementById('userInfo').classList.remove('hidden');
+
+            showToast('用户信息获取成功', 'success');
+          } catch (error) {
+            console.error('获取用户信息失败:', error);
+            showToast('获取信息失败，请稍后重试', 'error');
+          }
+        });
+
+      } catch (error) {
+        console.error('飞书SDK初始化失败:', error);
+        showToast('应用加载失败', 'error');
+      }
+    }
+
+    // 显示飞书客户端提示
+    function showToast(message, type = 'info') {
+      lark.device.notification.showToast({
+        message: message,
+        type: type,
+        duration: 2000
+      });
+    }
+
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', initFeishuSDK);
+  </script>
+</body>
+
+</html>

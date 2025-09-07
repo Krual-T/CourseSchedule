@@ -1,20 +1,17 @@
 {
-  "name": "courseschedule",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "course-schedule",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "devDependencies": {
+    "vite": "^7.1.2"
+  },
   "dependencies": {
-    "@larksuiteoapi/node-sdk": "^1.55.0",
-    "dotenv": "^17.2.1",
-    "express": "^5.1.0",
-    "moment": "^2.30.1",
-    "mongoose": "^8.18.0",
-    "multer": "^2.0.2"
+    "axios": "^1.11.0"
   }
 }
