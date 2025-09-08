@@ -124,7 +124,10 @@ function showAuthSection() {
   // 添加登录按钮事件监听
   document.getElementById('loginBtn').addEventListener('click', async () => {
     // 生成授权链接并跳转
-    const authUrl = await feishuClient.getAuthorizationUrl();
+    const authUrl = await feishuClient.getAuthorizationUrl([
+      'base:view:read', 'base:table:read', 'base:app:read',
+      'base:record:retrieve'
+    ]);
     window.location.href = authUrl;
   });
 }
@@ -188,19 +191,70 @@ async function handleFileImport(event) {
   }
 }
 
-// 加载并渲染课程
+// 加载并渲染课程（修改版：从飞书多维表拉取数据）
 async function loadAndRenderCourses() {
   try {
-    showMessage('正在加载课程表...');
+    showMessage('正在从飞书多维表加载全部记录...');
     const userInfo = JSON.parse(localStorage.getItem('feishu_current_user'));
-    const courses = await loadUserCourses(userInfo.userId);
+    const appToken = import.meta.env.VITE_FEISHU_DATABASE_ID; // 替换为实际app_token
+
+    // 直接获取全部记录（无需依赖视图）
+    const recordsData = await feishuClient.getCourseInfoTableMetadata(appToken);
+    const courses = recordsData.items.map(record => ({
+      id: record.record_id,
+      studentName: record.fields.student_name?.[0]?.en_name || '未知学生',
+      courseName: record.fields.course_name?.[0]?.text || '未知课程',
+      studentEmail: record.fields.student_name?.[0]?.email || '无'
+    }));
+
     renderCourseTable(courses);
-    showMessage(courses.length > 0 ? '课程表加载完成' : '暂无课程数据，请导入');
+    showMessage(`成功加载 ${courses.length} 条记录`);
+
   } catch (error) {
+    console.error('加载课程失败:', error);
     showMessage('加载课程失败: ' + error.message, 'error');
   }
 }
 
+// 表格渲染保持不变，但确保绑定的是解析后的文本字段
+function renderCourseTable(courses) {
+  const courseTableElement = document.getElementById('courseTable');
+
+  if (courses.length === 0) {
+    courseTableElement.innerHTML = `
+            <div class="empty-state">
+                <i class="fa fa-inbox"></i>
+                <p>暂无课程记录</p>
+            </div>
+        `;
+    return;
+  }
+
+  courseTableElement.innerHTML = `
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>记录ID</th>
+                        <th>学生姓名</th>
+                        <th>课程名称</th>
+                        <th>学生邮箱</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${courses.map(course => `
+                        <tr>
+                            <td>${course.id}</td>
+                            <td>${course.studentName}</td>
+                            <td>${course.courseName}</td>
+                            <td>${course.studentEmail}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
 // 显示消息提示
 function showMessage(text, type = 'info') {
   const messageElement = document.getElementById('message');

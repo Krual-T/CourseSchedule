@@ -286,6 +286,37 @@ export class FeishuClient {
     }
 
     /**
+     * 检查是否已登录（令牌存在且未过期）
+     * @returns {boolean} 是否已登录
+     */
+    isLoggedIn() {
+        const now = Date.now() / 1000;
+        return !!this.userTokenInfo.accessToken && this.userTokenInfo.expireTime > now;
+    }
+
+    /**
+     * 处理授权回调（前端拿到code后调用，完成登录流程）
+     * @param {string} code 飞书授权后返回的code
+     * @param {string} state 飞书返回的state（用于防CSRF校验）
+     * @returns {Promise<Object>} 用户信息（登录成功后返回）
+     */
+    async handleAuthCallback(code, state) {
+        // 1. 校验state（防CSRF攻击，必须与授权时的state一致）
+        const savedState = localStorage.getItem('feishu_auth_state');
+        console.debug('回调state:', state, '本地state:', savedState);
+        if (!savedState || state !== savedState) {
+            throw new Error('授权状态验证失败，可能存在安全风险');
+        }
+
+        // 2. 清除临时存储的state
+        localStorage.removeItem('feishu_auth_state');
+
+        // 3. 用code兑换令牌，再获取用户信息（完成登录）
+        await this.exchangeCodeForToken(code);
+        return this.getCurrentUser();
+    }
+
+    /**
      * 获取当前用户信息（使用飞书authen/v1/user_info接口，符合规范）
      * @returns {Promise<Object>} 整理后的用户信息
      */
@@ -317,34 +348,42 @@ export class FeishuClient {
     }
 
     /**
-     * 检查是否已登录（令牌存在且未过期）
-     * @returns {boolean} 是否已登录
+     * 获取指定多维表中course_information表内名为metadata的视图数据
+     * @param {string} appToken 多维表应用的app_token
+     * @returns {Promise<Object>} 名为metadata的视图数据
      */
-    isLoggedIn() {
-        const now = Date.now() / 1000;
-        return !!this.userTokenInfo.accessToken && this.userTokenInfo.expireTime > now;
-    }
-
-    /**
-     * 处理授权回调（前端拿到code后调用，完成登录流程）
-     * @param {string} code 飞书授权后返回的code
-     * @param {string} state 飞书返回的state（用于防CSRF校验）
-     * @returns {Promise<Object>} 用户信息（登录成功后返回）
-     */
-    async handleAuthCallback(code, state) {
-        // 1. 校验state（防CSRF攻击，必须与授权时的state一致）
-        const savedState = localStorage.getItem('feishu_auth_state');
-        console.debug('回调state:', state, '本地state:', savedState);
-        if (!savedState || state !== savedState) {
-            throw new Error('授权状态验证失败，可能存在安全风险');
+    async getCourseInfoTableMetadata(appToken) {
+        if (!appToken) {
+            throw new Error('请提供多维表的app_token');
         }
 
-        // 2. 清除临时存储的state
-        localStorage.removeItem('feishu_auth_state');
+        try {
+            // 1. 获取指定app下的所有表，找到course_information表
+            const tablesData = await this.get(`/bitable/v1/apps/${appToken}/tables`, {
+                page_size: 10
+            });
 
-        // 3. 用code兑换令牌，再获取用户信息（完成登录）
-        await this.exchangeCodeForToken(code);
-        return this.getCurrentUser();
+            const targetTable = tablesData.items.find(
+                table => table.name === 'course_information'
+            );
+
+            if (!targetTable) {
+                throw new Error('未找到名为course_information的表');
+            }
+
+            // 2. 直接调用「记录搜索接口」，无筛选条件时返回全部记录
+            // 注意：search接口需要请求体（POST），因此改用 this.post 并传空查询条件
+            const recordsResponse = await this.post(
+                `/bitable/v1/apps/${appToken}/tables/${targetTable.table_id}/records/search`,
+                {} // filter: {} 空filter表示“无筛选，返回全部记录” WIP TODO
+            );
+
+            return recordsResponse; // 返回格式：{ items: [...记录列表] }
+
+        } catch (error) {
+            console.error('获取course_information表的记录失败:', error.message);
+            throw error;
+        }
     }
 }
 
