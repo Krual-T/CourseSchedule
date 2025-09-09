@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { calculatePKCECodeChallenge, generateRandomCodeVerifier } from 'oauth4webapi';
+import { courseSchedule } from './CourseSchedule.js';
 /**
  * 飞书SDK（优化版）
  * 1. 支持PKCE安全机制（code_verifier/code_challenge）
@@ -348,11 +349,12 @@ export class FeishuClient {
     }
 
     /**
-     * 获取指定多维表中course_information表内名为metadata的视图数据
+     * 获取指定多维表中course_information表内的课程数据
      * @param {string} appToken 多维表应用的app_token
-     * @returns {Promise<Object>} 名为metadata的视图数据
+     * @param {string} openId 用户的open_id，用于过滤属于该用户的课程
+     * @returns {Promise<Object>} 过滤后的课程数据
      */
-    async getCourseInfoTableMetadata(appToken) {
+    async getCourseInfoTableMetadata(appToken, openId = null) {
         if (!appToken) {
             throw new Error('请提供多维表的app_token');
         }
@@ -371,11 +373,38 @@ export class FeishuClient {
                 throw new Error('未找到名为course_information的表');
             }
 
-            // 2. 直接调用「记录搜索接口」，无筛选条件时返回全部记录
-            // 注意：search接口需要请求体（POST），因此改用 this.post 并传空查询条件
+            // 2. 构建查询条件
+            const searchBody = {};
+
+            // 如果提供了openId，添加过滤条件
+            if (openId) {
+                const currentWeek = courseSchedule.getCurrentWeek();
+                searchBody.filter = {
+                    conjunction: "and",
+                    conditions: [
+                        {
+                            field_name: "student_info",
+                            operator: "is",
+                            value: [openId]
+                        },
+                        {
+                            field_name: "start_week",
+                            operator: "isLessEqual",
+                            value: [currentWeek.toString()]
+                        },
+                        {
+                            field_name: "end_week",
+                            operator: "isGreaterEqual",
+                            value: [currentWeek.toString()]
+                        }
+                    ]
+                };
+            }
+
+            // 3. 调用记录搜索接口
             const recordsResponse = await this.post(
                 `/bitable/v1/apps/${appToken}/tables/${targetTable.table_id}/records/search`,
-                {} // filter: {} 空filter表示“无筛选，返回全部记录” WIP TODO
+                searchBody
             );
 
             return recordsResponse; // 返回格式：{ items: [...记录列表] }
