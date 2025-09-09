@@ -113,22 +113,22 @@ export class CourseRecord {
             courseCode: this.courseCode,
             teacher: this.teacher,
             location: this.location,
-            classroom: this.classroom,
+            // classroom: this.classroom,
             dayOfWeek: this.dayOfWeek,
             startPeriod: this.startPeriod,
             endPeriod: this.endPeriod,
             startWeek: this.startWeek,
             endWeek: this.endWeek,
-            weekType: this.weekType,
-            courseType: this.courseType,
-            credits: this.credits,
-            department: this.department,
-            studentCount: this.studentCount,
-            notes: this.notes,
-            color: this.color,
-            lastSyncTime: this.lastSyncTime,
-            createdAt: this.createdAt,
-            updatedAt: this.updatedAt
+            // weekType: this.weekType,
+            // courseType: this.courseType,
+            // credits: this.credits,
+            // department: this.department,
+            // studentCount: this.studentCount,
+            // notes: this.notes,
+            // color: this.color,
+            // lastSyncTime: this.lastSyncTime,
+            // createdAt: this.createdAt,
+            // updatedAt: this.updatedAt
         };
     }
     

@@ -304,7 +304,6 @@ export class FeishuClient {
     async handleAuthCallback(code, state) {
         // 1. 校验state（防CSRF攻击，必须与授权时的state一致）
         const savedState = localStorage.getItem('feishu_auth_state');
-        console.debug('回调state:', state, '本地state:', savedState);
         if (!savedState || state !== savedState) {
             throw new Error('授权状态验证失败，可能存在安全风险');
         }
@@ -350,13 +349,13 @@ export class FeishuClient {
 
     /**
      * 获取指定多维表中course_information表内的课程数据
-     * @param {string} appToken 多维表应用的app_token
      * @param {string} openId 用户的open_id，用于过滤属于该用户的课程
      * @returns {Promise<Object>} 过滤后的课程数据
      */
-    async getCourseInfoTableMetadata(appToken, openId = null) {
+    async getCourseInfoTableMetadata(openId = null) {
+        const appToken = import.meta.env.VITE_FEISHU_DATABASE_ID;
         if (!appToken) {
-            throw new Error('请提供多维表的app_token');
+            throw new Error('未找到多维表app_token配置');
         }
 
         try {
@@ -412,6 +411,77 @@ export class FeishuClient {
         } catch (error) {
             console.error('获取course_information表的记录失败:', error.message);
             throw error;
+        }
+    }
+
+    /**
+     * 获取指定名称的多维表信息
+     * @param {string} tableName 要查找的表名
+     * @returns {Promise<Object>} 表信息，包含table_id等
+     * @private
+     */
+    async _getTableInfo(tableName) {
+        const appToken = import.meta.env.VITE_FEISHU_DATABASE_ID;
+        if (!appToken) {
+            throw new Error('未找到多维表app_token配置');
+        }
+
+        const tablesData = await this.get(`/bitable/v1/apps/${appToken}/tables`, {
+            page_size: 10
+        });
+
+        const targetTable = tablesData.items.find(
+            table => table.name === tableName
+        );
+
+        if (!targetTable) {
+            throw new Error(`未找到名为${tableName}的表`);
+        }
+
+        return {
+            appToken,
+            ...targetTable
+        };
+    }
+
+    /**
+     * 导入课程到飞书多维表
+     * @param {Array<Object>} courses 课程数据数组
+     * @returns {Promise<Array<Object>>} 导入成功的课程记录数组
+     */
+    async importMetadatasToCourseInfoTable(courses) {
+        try {
+            // 1. 获取当前用户信息
+            const userInfo = await this.getCurrentUser();
+
+            // 2. 获取课程信息表
+            const tableInfo = await this._getTableInfo('course_information');
+
+            // 3. 覆盖课程数据中的student_info字段
+            const coursesWithStudentInfo = courses.map(course => ({
+                ...course,
+                student_info: [{ id: userInfo.openId }] // 使用对象形式，兼容人员字段
+            }));
+
+            // 4. 构造请求体
+            const requestBody = {
+                records: coursesWithStudentInfo.map(course => ({
+                    fields: course
+                }))
+            };
+
+            // 5. 调用批量创建记录接口
+            const response = await this.post(
+                `/bitable/v1/apps/${tableInfo.appToken}/tables/${tableInfo.table_id}/records/batch_create`,
+                requestBody
+            );
+
+            // 6. 返回创建成功的记录
+            return response.records;
+
+        } catch (error) {
+            console.error('导入课程失败:', error);
+            throw new Error(`导入课程失败: ${error.message}`);
         }
     }
 }

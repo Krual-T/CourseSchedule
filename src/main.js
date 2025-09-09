@@ -1,5 +1,6 @@
 import { feishuClient } from './js/FeishuClient.js';
 import { courseSchedule } from './js/CourseSchedule.js';
+import './css/dialog.css';
 
 
 // 页面加载完成后初始化
@@ -92,11 +93,40 @@ function renderAppShell() {
                         </div>
                         
                         <div class="sidebar-item">
-                            <label class="sidebar-label">
+                            <button class="sidebar-btn" id="importBtn">
                                 <i class="fa fa-upload"></i>
                                 <span class="sidebar-text">导入课程</span>
-                            </label>
-                            <input type="file" id="courseFile" accept=".json" class="sidebar-file-input">
+                            </button>
+                            <input type="file" id="courseFile" accept=".json" class="sidebar-file-input" style="display: none;">
+                        </div>
+                        
+                        <!-- 导入对话框 -->
+                        <div id="importDialog" class="dialog-overlay" style="display: none;">
+                            <div class="dialog-content">
+                                <div class="dialog-header">
+                                    <h3>导入课程</h3>
+                                    <button class="dialog-close" id="closeImportDialog">
+                                        <i class="fa fa-times"></i>
+                                    </button>
+                                </div>
+                                <div class="dialog-body">
+                                    <div class="file-drop-zone" id="dropZone">
+                                        <i class="fa fa-cloud-upload"></i>
+                                        <p>拖放文件到这里或点击选择文件</p>
+                                        <small>支持 .json 格式文件</small>
+                                    </div>
+                                    <div class="import-options">
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" id="syncCalendar">
+                                            <span>同步到飞书日程</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="dialog-footer">
+                                    <button class="dialog-btn secondary" id="cancelImport">取消</button>
+                                    <button class="dialog-btn primary" id="confirmImport">导入</button>
+                                </div>
+                            </div>
                         </div>
                         
                         <button id="refreshCourses" class="sidebar-btn">
@@ -244,7 +274,7 @@ async function handleLogin() {
   // 生成授权链接并跳转
   const authUrl = await feishuClient.getAuthorizationUrl([
     'base:view:read', 'base:table:read', 'base:app:read',
-    'base:record:retrieve'
+    'base:record:retrieve','bitable:app'
   ]);
   window.location.href = authUrl;
 }
@@ -280,8 +310,11 @@ function showUserSection(userInfo) {
     }
   });
 
-  // 添加课程导入事件
-  document.getElementById('courseFile')?.addEventListener('change', handleFileImport);
+  // 添加导入按钮点击事件
+  document.getElementById('importBtn')?.addEventListener('click', showImportDialog);
+
+  // 初始化导入对话框
+  initImportDialog();
 
   // 添加清空课程事件
   document.getElementById('deleteCourses')?.addEventListener('click', async () => {
@@ -299,8 +332,8 @@ function showUserSection(userInfo) {
 
 
 // 处理文件导入
-async function handleFileImport(event) {
-  const file = event.target.files[0];
+async function handleFileImport(event, customFile = null, shouldSync = false) {
+  const file = customFile || (event?.target.files[0]);
   if (!file) return;
 
   if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
@@ -309,13 +342,56 @@ async function handleFileImport(event) {
   }
 
   try {
-    const userInfo = JSON.parse(localStorage.getItem('feishu_current_user'));
     showMessage('正在导入课程表...');
-    const courses = await importCourses(file, userInfo);
+
+    // 读取JSON文件内容
+    const fileContent = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(e);
+      reader.readAsText(file);
+    });
+
+    // 解析JSON数据
+    const jsonData = JSON.parse(fileContent);
+
+    // 将驼峰命名转换为下划线命名
+    const convertCamelToSnake = (obj) => {
+      const newObj = {};
+      for (let key in obj) {
+        const newKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        newObj[newKey] = obj[key];
+      }
+      return newObj;
+    };
+    // 转换数据格式
+    const courseMetadatas = jsonData.map(course => convertCamelToSnake(course));
+    // 导入课程数据
+    const courses = await feishuClient.importMetadatasToCourseInfoTable(courseMetadatas);
+
+    // 如果选择了同步到日程
+    if (shouldSync) {
+      showMessage('正在同步到飞书日程...');
+      await syncCoursesToCalendar(courses);
+    }
+
     renderCourseTable(courses);
-    showMessage(`成功导入 ${courses.length} 门课程`);
+    showMessage(`成功导入 ${courses.length} 门课程${shouldSync ? '并同步到日程' : ''}`);
+
     // 清空文件输入，允许重复选择同一个文件
-    event.target.value = '';
+    if (event?.target) {
+      event.target.value = '';
+    }
+
+    // 重置拖放区域
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+      dropZone.innerHTML = `
+        <i class="fa fa-cloud-upload"></i>
+        <p>拖放文件到这里或点击选择文件</p>
+        <small>支持 .json 格式文件</small>
+      `;
+    }
   } catch (error) {
     showMessage('导入失败: ' + error.message, 'error');
   }
@@ -326,10 +402,9 @@ async function loadAndRenderCourses() {
   try {
     showMessage('正在从飞书多维表加载课程数据...');
     const userInfo = JSON.parse(localStorage.getItem('feishu_current_user'));
-    const appToken = import.meta.env.VITE_FEISHU_DATABASE_ID; // 替换为实际app_token
 
     // 使用用户的openId过滤课程记录
-    const recordsData = await feishuClient.getCourseInfoTableMetadata(appToken, userInfo?.openId);
+    const recordsData = await feishuClient.getCourseInfoTableMetadata(userInfo?.openId);
 
     // 导入CourseRecord类和处理函数
     const { processFeishuRecords } = await import('./js/CourseRecord.js');
@@ -801,6 +876,108 @@ function initSidebarInteractions() {
     await loadAndRenderCourses();
     showMessage('课程数据已刷新', 'success');
   });
+}
+
+// 显示导入对话框
+function showImportDialog() {
+  const dialog = document.getElementById('importDialog');
+  dialog.style.display = 'flex';
+}
+
+// 关闭导入对话框
+function closeImportDialog() {
+  const dialog = document.getElementById('importDialog');
+  dialog.style.display = 'none';
+  // 重置拖放区域样式
+  const dropZone = document.getElementById('dropZone');
+  dropZone.classList.remove('drag-over');
+}
+
+// 初始化导入对话框
+function initImportDialog() {
+  const dialog = document.getElementById('importDialog');
+  const dropZone = document.getElementById('dropZone');
+  const closeBtn = document.getElementById('closeImportDialog');
+  const cancelBtn = document.getElementById('cancelImport');
+  const confirmBtn = document.getElementById('confirmImport');
+
+  // 关闭按钮事件
+  closeBtn?.addEventListener('click', closeImportDialog);
+  cancelBtn?.addEventListener('click', closeImportDialog);
+
+  // 确认导入按钮事件
+  confirmBtn?.addEventListener('click', async () => {
+    const fileInput = document.getElementById('courseFile');
+    const file = fileInput.files[0];
+    if (!file) {
+      showMessage('请选择文件', 'error');
+      return;
+    }
+
+    // 获取是否同步到日程的选项
+    const shouldSync = document.getElementById('syncCalendar').checked;
+    await handleFileImport(null, file, shouldSync);
+    closeImportDialog();
+  });
+
+  // 拖放区域点击事件
+  dropZone?.addEventListener('click', () => {
+    document.getElementById('courseFile')?.click();
+  });
+
+  // 文件选择变化事件
+  document.getElementById('courseFile')?.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      dropZone.innerHTML = `
+        <i class="fa fa-file"></i>
+        <p>${file.name}</p>
+      `;
+    }
+  });
+
+  // 拖放相关事件
+  dropZone?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone?.addEventListener('dragleave', () => {
+    dropZone.classList.remove('drag-over');
+  });
+
+  dropZone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+        showMessage('请选择JSON格式的文件', 'error');
+        return;
+      }
+
+      const fileInput = document.getElementById('courseFile');
+      fileInput.files = e.dataTransfer.files;
+      dropZone.innerHTML = `
+        <i class="fa fa-file"></i>
+        <p>${file.name}</p>
+      `;
+    }
+  });
+
+  // 点击对话框外部区域关闭
+  dialog?.addEventListener('click', (e) => {
+    if (e.target === dialog) {
+      closeImportDialog();
+    }
+  });
+}
+
+// 处理课程同步到日程
+async function syncCoursesToCalendar(courses) {
+  // TODO: 实现课程同步到飞书日程的功能
+  console.log('同步课程到日程的功能待实现');
 }
 
 // 更新日期时间显示
