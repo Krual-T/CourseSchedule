@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "backend": "node feishu-backend/server.js",
-    "dev:all": "concurrently \"npm run dev\" \"npm run backend\""
+    "dev:all": "concurrently \"npm run dev\" \"npm run backend\"",
+    "prod:all": "concurrently \"npm run preview\" \"npm run backend\""
   },
   "devDependencies": {
     "vite": "^7.1.2"
