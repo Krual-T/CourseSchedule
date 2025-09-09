@@ -32,3 +32,4 @@ src/python_tools/
 
 !index.html
 !package.json
+!vite.config.js
