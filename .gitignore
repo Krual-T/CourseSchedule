@@ -28,8 +28,9 @@
 !src/
 !src/**/*
 
-src/python_tools/
-
+!feishu-backend/
+!feishu-backend/**/*
+feishu-backend/node_modules/
 !index.html
 !package.json
 !vite.config.js
