@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => {
 
     return {
         server: {
+            host: '127.0.0.1',
+            port: 4173,
+            cors: true, // 允许跨域
             proxy: {
                 '/proxy-api': {
                     target: env.VITE_PROXY_BACKEND_URL, // 本地后端地址

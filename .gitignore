@@ -28,8 +28,8 @@
 !src/
 !src/**/*
 
-!feishu-backend/
-!feishu-backend/**/*
+# !feishu-backend/
+# !feishu-backend/**/*
 feishu-backend/node_modules/
 !index.html
 !package.json
